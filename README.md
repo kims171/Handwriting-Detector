@@ -137,6 +137,8 @@ The CER and WER will be printed to the console. `best_vit.pt` is the best checkp
 
 Simply run the `Handwriting_Recognition_Pipeline.ipynb` end-to-end to train the CRNN model on the IAM lines dataset. However, before that, ensure that the `checkpoints/` directory contains the best ViT checkpoint (`best_vit.pt`) and the corresponding `vocab.json` file. If it does not exist, go to step 3 and train the ViT model first.
 
+OR, you can click here, [Download](https://drive.google.com/drive/folders/1Xx1Q8alQuTJj4rI-5H5GJdugelnb8C-2?usp=sharing) to use the latest `best_vit.pt` and `vocab.json` files from our Google Drive and place them in the `checkpoints/` directory.
+
 ## 6. Gradio Demo
 
 After running the `Handwriting_Recognition_Pipeline.ipynb` notebook end-to-end, you can access the Gradio interface by clicking the link in the last cell.

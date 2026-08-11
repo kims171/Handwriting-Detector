@@ -1,13 +1,5 @@
 """
 Main training entry point for HTR-VT on IAM.
-
-Usage:
-    python main.py --ckpt_dir checkpoints/run1
-
-Hyperparameter defaults match the paper's stated implementation details
-(Section 3.2) unless noted otherwise. A few (SAM's rho, num_workers,
-random seed) aren't specified in the paper text and are our own reasonable
-defaults -- flagged inline.
 """
 
 import sys
@@ -137,11 +129,6 @@ def run(args):
     val_split = "validation" if "validation" in ds else "val"
     val_ds = IAMLineDataset(ds[val_split], char2idx, args.target_w, args.target_h)
 
-    # ---- Preflight check: label length vs CTC sequence length L ----
-    # L is determined by the CNN's width downsampling (512 -> 128, see
-    # cnn_feature_extractor.py). CTC needs L to comfortably exceed the
-    # longest label, with extra room for lines with many adjacent repeated
-    # characters (each such pair effectively costs 2 output positions).
     L = args.target_w // 4  # matches the CNN's stem-only width downsampling (4x)
     train_label_lens = [len(ds["train"][i]["text"]) for i in range(len(ds["train"]))]
     max_label_len_seen = max(train_label_lens)
@@ -174,12 +161,6 @@ def run(args):
     print(f"\nModel parameters: {n_params:,} ({n_params/1e6:.2f}M)")
 
     # ---- Optimizer ----
-    # Weight decay is applied ONLY to 2D+ params (weight matrices), not to
-    # biases, LayerNorm/BatchNorm params, or the span-mask token -- see
-    # optim_utils.py for why this matters (uniformly decaying LayerNorm
-    # gains and biases at weight_decay=0.5 is an unusually large, likely
-    # destructive force, and a real candidate for the blank-collapse
-    # instability observed without this split).
     param_groups, decay_params, no_decay_params = build_optimizer_param_groups(model, args.weight_decay)
     print(f"Optimizer param groups: {sum(p.numel() for p in decay_params):,} decayed, "
           f"{sum(p.numel() for p in no_decay_params):,} not decayed")

@@ -1,15 +1,3 @@
-"""
-Greedy CTC decoding and CER/WER metrics for HTR-VT.
-
-CER = Levenshtein(pred, gt) / len(gt), computed at the character level.
-WER = same, computed at the word level (splitting on whitespace).
-
-The paper reports these WITHOUT beam search or an external language model
-(Section 4.2), so greedy decoding is the correct match for reproducing their
-headline numbers -- beam search is only introduced later for the decoder
-ablation (Section 4.3), which is a separate, optional experiment.
-"""
-
 import torch
 import editdistance
 
@@ -17,16 +5,6 @@ import editdistance
 def greedy_decode(log_probs, blank_idx, idx2char):
     """log_probs: [B, L, num_classes+1] (post log_softmax).
     Returns a list of B decoded strings.
-
-    Standard CTC greedy decode: argmax each timestep, collapse consecutive
-    repeats, then remove blanks. Note the ORDER matters -- collapsing repeats
-    happens before blank removal, so that a real repeated character (e.g.
-    "ll") separated by a blank in between survives correctly: predicted
-    sequence [l, blank, l] collapses repeats to [l, blank, l] (no change,
-    since blank breaks up the repeat), then blank removal gives [l, l] --
-    correct. Whereas [l, l, l] (no blank) collapses to [l] -- also correct,
-    since that's CTC's mechanism for representing a single "l" spread across
-    multiple timesteps.
     """
     pred_ids = log_probs.argmax(dim=-1)  # [B, L]
     B = pred_ids.shape[0]
@@ -86,8 +64,7 @@ def evaluate_batch(log_probs, gt_strings, blank_idx, idx2char):
 
 class CorpusMetrics:
     """Accumulates total edit distance and total length across an entire
-    dataset, for correct corpus-level CER/WER (as opposed to per-batch
-    averaging, which is a common and subtle bug)."""
+    dataset, for correct corpus-level CER/WER."""
 
     def __init__(self):
         self.total_char_edits = 0

@@ -1,10 +1,5 @@
 """
-IAM data pipeline for HTR-VT, adapted to match the conventions used in the
-official repo's data-loading code (myLoadDS / npThum / SameTrCollate), rather
-than assumptions we made before seeing that code. Key differences from our
-earlier draft are called out inline below.
-
-Run locally where you have the Teklia/IAM-line dataset + HF network access.
+IAM data pipeline for HTR-VT
 """
 from functools import partial
 from collections import Counter
@@ -20,10 +15,6 @@ from data.augmentations import random_affine, random_erosion, random_dilation, r
 
 
 # ---------- Vocab ----------
-# CHANGED: blank token is now the LAST index (len(alphabet)), matching the
-# common HTR/CTC convention and the fact that the official get_alphabet()
-# does not reserve index 0 for anything -- real characters start at 0.
-
 def build_vocab(dataset):
     charset = Counter()
     for example in dataset:
@@ -36,18 +27,6 @@ def build_vocab(dataset):
 
 
 # ---------- Resize: aspect-preserving, capped, right-padded ----------
-# CHANGED BACK: this matches npThum from the official repo. Scale so height
-# becomes target_h; let width scale proportionally UNLESS that would exceed
-# target_w, in which case cap width at target_w (this is where squashing
-# happens, only for lines whose natural aspect ratio doesn't fit). Whatever
-# gap remains after resizing is padded with white on the right.
-#
-# Earlier we switched this to an unconditional squash-to-512x64 after seeing
-# that ~95% of IAM lines exceed the width cap anyway -- that reasoning was
-# incomplete. It's correct behavior for those 95%, but wrong for the
-# remaining ~5% of short lines, which should keep their natural letter width
-# and get padded, not stretched to fill the full 512px.
-
 def resize_iam_style(image, target_w=512, target_h=64):
     image = image.convert("L")
     w, h = image.size
@@ -61,11 +40,6 @@ def resize_iam_style(image, target_w=512, target_h=64):
 
 
 # ---------- Dataset: returns RAW (unaugmented, unnormalized-beyond-[0,1]) tensors ----------
-# CHANGED: augmentation is no longer applied here. The official code applies
-# it batch-wide inside the collate function (SameTrCollate), not per-sample
-# inside __getitem__. We match that below. Normalization is also simplified
-# to plain [0,1] (matching skimage.img_as_float32 + /255.), no mean-centering.
-
 class IAMLineDataset(Dataset):
     def __init__(self, hf_dataset, char2idx, target_w=512, target_h=64, max_label_len=None):
         self.dataset = hf_dataset
@@ -103,19 +77,6 @@ class IAMLineDataset(Dataset):
 
 
 # ---------- Collate function: batch-level augmentation, matching SameTrCollate ----------
-# CHANGED: augmentation now happens here, once per batch, not per-sample.
-# Each augmentation CATEGORY gets one coin flip for the whole batch (not one
-# flip per image). Erosion and dilation are mutually exclusive per batch,
-# matching the official code, rather than two independent draws.
-#
-# NOTE ON ELASTIC DISTORTION: the official snippet we were given doesn't show
-# it (only RandomTransform / erosion-or-dilation / ColorJitter appear here),
-# even though the paper's text explicitly lists elastic distortion as one of
-# five augmentations. It may be folded into RandomTransform, or live
-# elsewhere in transform.py which we don't have visibility into. We keep it
-# here as its own independent category to match the paper's written
-# description, but flag this as an open discrepancy worth resolving if you
-# get access to transform.py.
 
 def collate_fn(batch, p=0.5, dila_ero_max_kernel=3, jitter_brightness=0.3,
                      jitter_contrast=0.3, jitter_saturation=0.0, jitter_hue=0.0):

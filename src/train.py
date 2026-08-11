@@ -1,36 +1,6 @@
 """
 Training loop for HTR-VT.
-
-Hyperparameters below match the paper's stated implementation details
-(Section 3.2): batch size 128, AdamW inside SAM with weight decay 0.5,
-max LR 1e-3, 1,000 warmup iterations, 100,000 total iterations, EMA decay
-0.9999. Training is ITERATION-based, not epoch-based -- we cycle through the
-DataLoader indefinitely rather than looping over epochs, matching the
-official repo's cycle_data() helper we saw earlier.
-
-This file assumes a SAM optimizer with the standard davda54/sam-style API:
-    optimizer.first_step(zero_grad=True)
-    optimizer.second_step(zero_grad=True)
-and that optimizer.param_groups is a normal list of param-group dicts (true
-for that implementation, since it wraps a base_optimizer and copies its
-param_groups) -- so a standard LR-setting loop works directly on it. If your
-SAM implementation's API differs, the two call sites are isolated below.
 """
-
-# ---------- Full optimizer state save/load (handles SAM's nested base_optimizer) ----------
-# SAM wraps a separate base_optimizer (e.g. AdamW) with its OWN independent
-# .state dict, where the actual momentum buffers (exp_avg, exp_avg_sq) live.
-# SAM's own (outer) .state only holds transient "e_w" perturbation values.
-# Calling the outer optimizer.state_dict() alone silently drops all of
-# AdamW's momentum -- confirmed this concretely: a fresh SAM optimizer after
-# real training steps has real exp_avg values inside base_optimizer.state,
-# but optimizer.state_dict()'s own state dict never contains them. This
-# means every resume was cold-starting Adam's moment estimates while
-# already at full LR, producing exactly the kind of burst-of-large-updates
-# instability seen right at a resume point.
-#
-# If your SAM implementation doesn't use the attribute name "base_optimizer",
-# adjust the getattr calls below to match.
 
 def get_full_optimizer_state(optimizer):
     state = {"outer_state_dict": optimizer.state_dict()}
@@ -44,11 +14,6 @@ def load_full_optimizer_state(optimizer, saved):
     base_opt = getattr(optimizer, "base_optimizer", None)
 
     if "outer_state_dict" not in saved:
-        # OLD format: `saved` IS the raw optimizer.state_dict() output, from a
-        # checkpoint saved before this fix existed (e.g. the original best.pt
-        # from before we introduced get_full_optimizer_state). No separate
-        # base_optimizer state was ever captured -- momentum cannot be
-        # recovered, this is a real, unavoidable one-time cold start.
         print("WARNING: checkpoint uses the OLD optimizer-state format (pre-fix) -- "
               "Adam momentum will cold-start from this resume. This should only "
               "happen for checkpoints saved before the optimizer-state fix; any "
@@ -63,15 +28,6 @@ def load_full_optimizer_state(optimizer, saved):
     optimizer.load_state_dict(saved["outer_state_dict"])
     if base_opt is not None and "base_optimizer_state_dict" in saved:
         base_opt.load_state_dict(saved["base_optimizer_state_dict"])
-        # base_opt.load_state_dict() just rebuilt base_opt's OWN param_groups
-        # list, breaking the shared-reference invariant SAM's __init__ sets up
-        # (self.param_groups IS self.base_optimizer.param_groups, same object).
-        # Confirmed concretely that without this line, set_lr()'s per-step
-        # mutation of optimizer.param_groups silently stops reaching the real
-        # AdamW update after any resume -- training would keep running at a
-        # frozen, stale LR with no error or warning. Restore the shared
-        # reference explicitly, matching what this SAM's own load_state_dict
-        # override does for the non-base_optimizer_state_dict case.
         base_opt.param_groups = optimizer.param_groups
     elif base_opt is not None:
         print("WARNING: checkpoint has no base_optimizer_state_dict (likely saved "
@@ -105,24 +61,6 @@ def set_lr(optimizer, lr):
 # ---------- EMA ----------
 
 class EMA:
-    """Exponential moving average over a model's float parameters and
-    buffers (so e.g. BatchNorm running stats get EMA'd too, matching common
-    practice for EMA implementations like timm's ModelEmaV2).
-
-    Uses a WARMUP schedule for the decay rate: ramps linearly from 0 up to
-    target_decay over warmup_steps, rather than applying target_decay from
-    step 1. Without this, decay=0.9999 gives an effective half-life of
-    ln(2)/(1-0.9999) ~= 6931 steps -- confirmed concretely that this caused
-    the EMA weights to still be ~74% dominated by random initialization at
-    step 3000, producing near-garbage validation predictions (blank
-    collapse) even while the live model was training completely normally
-    underneath. The paper states decay=0.9999 as a flat constant with no
-    mention of warmup, so this is a deviation from the literal text -- but
-    a very standard, common one (this exact linear-ramp technique is used
-    in most practical EMA implementations, e.g. timm's ModelEmaV2), and
-    necessary for early-training evaluation to mean anything at all.
-    """
-
     def __init__(self, model, decay=0.9999, warmup_steps=2000):
         self.target_decay = decay
         self.warmup_steps = warmup_steps
@@ -302,14 +240,6 @@ def train(model, optimizer, train_loader, val_loader, blank_idx, idx2char, devic
             running_loss = 0.0
 
         if step % eval_every == 0:
-            # Evaluate EMA weights (matches the paper's stated approach for
-            # final reporting) AND live weights (diagnostic only -- added
-            # after discovering EMA immaturity early in training made
-            # validation numbers meaningless for thousands of steps despite
-            # the live model training completely normally underneath).
-            # Checkpointing/best-tracking still uses EMA, matching the
-            # paper -- but printing both gives visibility to catch this
-            # class of issue immediately instead of chasing it blind.
             val_cer, val_wer = validate(ema.shadow, val_loader, blank_idx, idx2char, device)
             ema.shadow.eval()  # validate() leaves it in .train() mode; ema.shadow should
                                 # stay permanently in eval mode (it's averaged, never backprop-trained)

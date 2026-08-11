@@ -11,11 +11,6 @@ def build_optimizer_param_groups(model, weight_decay):
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-        # 1D params: biases, LayerNorm/BatchNorm weight & bias, and any other
-        # bare vector parameter (e.g. our span-mask learnable token). None of
-        # these should be weight-decayed -- standard practice, and especially
-        # important here since our mask_token and positional-adjacent params
-        # are exactly the kind of thing large uniform decay would damage.
         if param.ndim <= 1:
             no_decay_params.append(param)
         else:

@@ -1,11 +1,8 @@
 """
 Transformer encoder (pre-LN, encoder-only, no CLS token) and CTC output head
-for HTR-VT, following Section 3.1's formulation:
+for HTR-VT.
 
-    y^n = x^(n-1) + MSA(LN(x^(n-1)))
-    x^n = y^n + FFN(LN(y^n))
-
-Implementation details from the paper: 4 layers, dim 768, 6 heads, FFN hidden
+4 layers, dim 768, 6 heads, FFN hidden
 dim 3072, GELU activation.
 """
 

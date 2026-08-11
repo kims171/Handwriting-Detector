@@ -1,12 +1,5 @@
 """
-CNN feature extractor for HTR-VT: a modified ResNet-18 that collapses height
-to 1 and reduces width by 4x, matching the paper's stated 1x128 feature map
-for a 64x512 input line image (see Section 4.3's attention-map discussion).
-
-The exact stride surgery isn't spelled out in the paper text -- this is a
-principled reconstruction targeting the stated output shape, not a direct
-transcription of the official repo (which we don't have visibility into for
-this file). Worth cross-checking against the repo if you get access to it.
+CNN feature extractor for HTR-VT
 """
 
 import torch

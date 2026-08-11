@@ -41,15 +41,6 @@ def random_affine(img, max_rotate=3, max_translate=0.02, max_scale=0.05, max_she
 # ---------- 2. Erosion ----------
 
 def random_erosion(img, kernel_size=2):
-    """Erosion on ink (dark pixels) = dilation on the white background in cv2 terms.
-    Since ink is dark and background is light, cv2.erode on the raw grayscale
-    array actually erodes the bright regions, which grows dark strokes.
-    We want THINNER strokes for 'erosion' of ink, so we dilate the raw array.
-
-    NOTE: kept to a single small kernel size (2x2) rather than a range, since a
-    3x3 kernel was enough to wipe out thin strokes entirely in testing. Revisit
-    this once you can test against real IAM strokes -- pen stroke thickness
-    varies a lot by writer, so this may need tuning per-dataset."""
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     out = cv2.dilate(img, kernel, iterations=1)  # dilate bright pixels -> thinner dark strokes
     return out
@@ -111,7 +102,7 @@ AUGMENTATIONS = [
 def apply_augmentations(img, p=0.5, augmentations=AUGMENTATIONS):
     """img: numpy uint8 array (H, W). Applies each augmentation independently
     with probability p, in a fixed order (order matters slightly for geometric
-    vs. photometric ops, but paper doesn't specify — this is a reasonable default)."""
+    vs. photometric ops)."""
     out = img.copy()
     applied = []
     for aug_fn in augmentations:

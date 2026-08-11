@@ -3,7 +3,7 @@ Positional embeddings and span masking for HTR-VT, applied to the [B, L, C]
 token sequence produced by the CNN feature extractor.
 
 Order of operations: positional embeddings are added first,
-THEN span masking replaces a subset of those (already position-encoded)
+Then span masking replaces a subset of those (already position-encoded)
 tokens with a shared learnable mask token. Masking is training-time only.
 """
 
@@ -33,12 +33,6 @@ class SinusoidalPositionalEmbedding(nn.Module):
 # ---------- Span masking ----------
 
 class SpanMasking(nn.Module):
-    """Replaces contiguous spans of tokens with a shared learnable mask
-    embedding. Spans are all exactly `span_length` tokens long. Spans
-    are sampled repeatedly (with possible overlap) until the total masked
-    fraction reaches `mask_ratio`. Training-time only -- returns the input
-    unchanged in eval mode."""
-
     def __init__(self, dim, mask_ratio=0.4, span_length=8, max_attempts=1000):
         super().__init__()
         self.mask_ratio = mask_ratio
@@ -48,12 +42,6 @@ class SpanMasking(nn.Module):
         nn.init.normal_(self.mask_token, std=0.02)
 
     def sample_mask(self, B, L, device):
-        """Sample a fresh boolean mask, [B, L]. Separated out from forward()
-        so a training loop (e.g. SAM's two-pass step) can sample once and
-        reuse the SAME mask across multiple forward calls -- otherwise each
-        forward gets independently-random masking, which for SAM specifically
-        means its two loss evaluations are no longer measuring sharpness of
-        one consistent objective."""
         s = min(self.span_length, L)
         target_count = int(round(self.mask_ratio * L))
 
@@ -74,8 +62,7 @@ class SpanMasking(nn.Module):
         return out
 
     def forward(self, x, mask=None):
-        # x: [B, L, C]. If mask is provided, reuse it (see sample_mask's
-        # docstring for why this matters under SAM). Otherwise sample fresh.
+        # x: [B, L, C]. If mask is provided, reuse it. Otherwise sample fresh.
         if not self.training:
             return x, None
 
